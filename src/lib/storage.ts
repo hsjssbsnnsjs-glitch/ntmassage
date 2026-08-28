@@ -255,9 +255,23 @@ class StorageService {
   searchUsers(query: string): User[] {
     const clean = query.trim().toLowerCase().replace(/^@+/, '');
     if (!clean) return [];
-    fetch(`/api/users/search?q=${encodeURIComponent(clean)}`)
-      .then((res) => (res.ok ? res.json() : []))
-      .then((serverUsers: User[]) => {
+    const users = this.getAllUsers();
+    return users.filter(
+      (u) =>
+        u.username.toLowerCase().includes(clean) ||
+        u.displayName.toLowerCase().includes(clean) ||
+        u.emailOrPhone.toLowerCase().includes(clean)
+    );
+  }
+
+  async searchUsersAsync(query: string): Promise<User[]> {
+    const clean = query.trim().toLowerCase().replace(/^@+/, '');
+    if (!clean) return [];
+
+    try {
+      const res = await fetch(`/api/users/search?q=${encodeURIComponent(clean)}`);
+      if (res.ok) {
+        const serverUsers: User[] = await res.json();
         if (Array.isArray(serverUsers) && serverUsers.length > 0) {
           const current = this.getAllUsers();
           const map = new Map<string, User>();
@@ -268,15 +282,12 @@ class StorageService {
           });
           localStorage.setItem(USERS_KEY, JSON.stringify(Array.from(map.values())));
         }
-      })
-      .catch(() => {});
-    const users = this.getAllUsers();
-    return users.filter(
-      (u) =>
-        u.username.toLowerCase().includes(clean) ||
-        u.displayName.toLowerCase().includes(clean) ||
-        u.emailOrPhone.toLowerCase().includes(clean)
-    );
+      }
+    } catch {
+      // Fallback to local
+    }
+
+    return this.searchUsers(clean);
   }
 
   async registerUser(userData: {

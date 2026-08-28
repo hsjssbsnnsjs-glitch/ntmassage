@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { X, Check, RotateCw, ZoomIn, ZoomOut, RefreshCw, Smartphone, Square, Monitor, Maximize2, Loader2 } from 'lucide-react';
 
 type AspectPreset = 'ORIGINAL' | '3:4' | '1:1' | '16:9' | '9:16';
@@ -18,8 +18,21 @@ export const ImageCropperDialog: React.FC<ImageCropperDialogProps> = ({
   const [rotation, setRotation] = useState(0);
   const [aspect, setAspect] = useState<AspectPreset>('ORIGINAL');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [naturalDimensions, setNaturalDimensions] = useState<{ width: number; height: number }>({ width: 600, height: 600 });
 
   const imgRef = useRef<HTMLImageElement>(null);
+
+  useEffect(() => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      setNaturalDimensions({
+        width: img.naturalWidth || img.width,
+        height: img.naturalHeight || img.height,
+      });
+    };
+    img.src = imageSrc;
+  }, [imageSrc]);
 
   const handleRotate = () => {
     setRotation((prev) => (prev + 90) % 360);
@@ -29,22 +42,6 @@ export const ImageCropperDialog: React.FC<ImageCropperDialogProps> = ({
     setScale(1);
     setRotation(0);
     setAspect('ORIGINAL');
-  };
-
-  const getFrameAspectClass = () => {
-    switch (aspect) {
-      case '3:4':
-        return 'w-64 h-[340px] aspect-[3/4]';
-      case '1:1':
-        return 'w-64 h-64 sm:w-72 sm:h-72 aspect-square';
-      case '16:9':
-        return 'w-80 h-44 sm:w-96 sm:h-56 aspect-video';
-      case '9:16':
-        return 'w-52 h-92 sm:w-60 sm:h-[400px] aspect-[9/16]';
-      case 'ORIGINAL':
-      default:
-        return 'max-w-[85vw] max-h-[55vh] w-auto h-auto';
-    }
   };
 
   const handleApply = async () => {
@@ -66,13 +63,20 @@ export const ImageCropperDialog: React.FC<ImageCropperDialogProps> = ({
         return;
       }
 
-      // Calculate output dimensions (max 800px to ensure ultra fast rendering and no memory lag)
-      let targetW = 600;
-      let targetH = 600;
+      const isRotated90or270 = rotation % 180 !== 0;
+      const naturalW = img.naturalWidth || img.width;
+      const naturalH = img.naturalHeight || img.height;
+
+      // Effective source width & height after rotation
+      const effectiveW = isRotated90or270 ? naturalH : naturalW;
+      const effectiveH = isRotated90or270 ? naturalW : naturalH;
+
+      let targetW = 800;
+      let targetH = 800;
 
       if (aspect === '1:1') {
-        targetW = 600;
-        targetH = 600;
+        targetW = 800;
+        targetH = 800;
       } else if (aspect === '3:4') {
         targetW = 600;
         targetH = 800;
@@ -83,12 +87,13 @@ export const ImageCropperDialog: React.FC<ImageCropperDialogProps> = ({
         targetW = 960;
         targetH = 540;
       } else {
-        const ratio = img.width / img.height;
-        if (ratio > 1) {
-          targetW = Math.min(800, img.width);
+        // ORIGINAL aspect ratio: maintain exact aspect ratio without distortion
+        const ratio = effectiveW / effectiveH;
+        if (ratio >= 1) {
+          targetW = Math.min(1200, effectiveW);
           targetH = Math.round(targetW / ratio);
         } else {
-          targetH = Math.min(800, img.height);
+          targetH = Math.min(1200, effectiveH);
           targetW = Math.round(targetH * ratio);
         }
       }
@@ -104,20 +109,40 @@ export const ImageCropperDialog: React.FC<ImageCropperDialogProps> = ({
       ctx.rotate((rotation * Math.PI) / 180);
       ctx.scale(scale, scale);
 
-      // Draw image centered
-      const drawRatio = Math.max(targetW / img.width, targetH / img.height);
-      const drawW = img.width * drawRatio;
-      const drawH = img.height * drawRatio;
-      ctx.drawImage(img, -drawW / 2, -drawH / 2, drawW, drawH);
+      // Calculate exact scaling to cover without distortion
+      const baseScale = Math.max(targetW / effectiveW, targetH / effectiveH);
+      const drawW = naturalW * baseScale;
+      const drawH = naturalH * baseScale;
 
+      ctx.drawImage(img, -drawW / 2, -drawH / 2, drawW, drawH);
       ctx.restore();
 
-      const optimizedDataUrl = canvas.toDataURL('image/jpeg', 0.85);
+      const optimizedDataUrl = canvas.toDataURL('image/jpeg', 0.92);
       onConfirm(optimizedDataUrl);
     } catch {
       onConfirm(imageSrc);
     } finally {
       setIsProcessing(false);
+    }
+  };
+
+  const getAspectStyle = () => {
+    switch (aspect) {
+      case '1:1':
+        return { aspectRatio: '1 / 1' };
+      case '3:4':
+        return { aspectRatio: '3 / 4' };
+      case '9:16':
+        return { aspectRatio: '9 / 16' };
+      case '16:9':
+        return { aspectRatio: '16 / 9' };
+      case 'ORIGINAL':
+      default: {
+        const isRotated90or270 = rotation % 180 !== 0;
+        const w = isRotated90or270 ? naturalDimensions.height : naturalDimensions.width;
+        const h = isRotated90or270 ? naturalDimensions.width : naturalDimensions.height;
+        return { aspectRatio: `${w} / ${h}` };
+      }
     }
   };
 
@@ -137,7 +162,7 @@ export const ImageCropperDialog: React.FC<ImageCropperDialogProps> = ({
         </button>
         <div className="text-center">
           <span className="font-bold text-sm block">قص وتعديل الصورة</span>
-          <span className="text-[10px] text-zinc-400">تدوير، تكبير وتعديل الأبعاد بدون تعليق</span>
+          <span className="text-[10px] text-zinc-400">تدوير وتعديل بدون أي مط أو تشويه</span>
         </div>
         <button
           onClick={handleReset}
@@ -150,28 +175,25 @@ export const ImageCropperDialog: React.FC<ImageCropperDialogProps> = ({
       </div>
 
       {/* Viewport Frame */}
-      <div className="flex-1 flex items-center justify-center relative overflow-hidden my-3 bg-zinc-950 rounded-2xl border border-zinc-800/80">
-        {aspect !== 'ORIGINAL' && (
-          <div className="absolute inset-0 pointer-events-none z-20 flex items-center justify-center">
-            <div
-              className={`${getFrameAspectClass()} rounded-xl border-2 border-white/80 shadow-[0_0_0_9999px_rgba(0,0,0,0.65)] transition-all duration-200`}
+      <div className="flex-1 flex items-center justify-center relative overflow-hidden my-3 bg-zinc-950 rounded-2xl border border-zinc-800/80 p-3">
+        <div
+          className="relative max-h-[55vh] max-w-[85vw] flex items-center justify-center overflow-hidden rounded-xl border border-zinc-700/80 shadow-2xl bg-black transition-all duration-200"
+          style={{ ...getAspectStyle(), width: '100%', height: 'auto', maxHeight: '55vh', maxWidth: '85vw' }}
+        >
+          <div
+            className="w-full h-full flex items-center justify-center transition-transform duration-100"
+            style={{
+              transform: `scale(${scale}) rotate(${rotation}deg)`,
+            }}
+          >
+            <img
+              ref={imgRef}
+              src={imageSrc}
+              alt="Crop candidate"
+              referrerPolicy="no-referrer"
+              className="max-h-full max-w-full object-contain select-none shadow-2xl"
             />
           </div>
-        )}
-
-        <div
-          className="transition-transform duration-100 flex items-center justify-center"
-          style={{
-            transform: `scale(${scale}) rotate(${rotation}deg)`,
-          }}
-        >
-          <img
-            ref={imgRef}
-            src={imageSrc}
-            alt="Crop candidate"
-            referrerPolicy="no-referrer"
-            className="max-h-[55vh] max-w-[85vw] object-contain select-none shadow-2xl"
-          />
         </div>
       </div>
 
@@ -188,7 +210,7 @@ export const ImageCropperDialog: React.FC<ImageCropperDialogProps> = ({
             }`}
           >
             <Maximize2 size={13} />
-            <span>الأصلي (حر)</span>
+            <span>الأصلي (بدون مط)</span>
           </button>
           <button
             onClick={() => setAspect('3:4')}
@@ -199,7 +221,7 @@ export const ImageCropperDialog: React.FC<ImageCropperDialogProps> = ({
             }`}
           >
             <Smartphone size={13} />
-            <span>3:4 / منشور</span>
+            <span>3:4 عمودي</span>
           </button>
           <button
             onClick={() => setAspect('1:1')}
@@ -265,7 +287,7 @@ export const ImageCropperDialog: React.FC<ImageCropperDialogProps> = ({
             {isProcessing ? (
               <>
                 <Loader2 size={16} className="animate-spin" />
-                <span>جاري المعالجة...</span>
+                <span>جاري الحفظ بدقة عالية...</span>
               </>
             ) : (
               <>

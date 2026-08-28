@@ -1,8 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   X,
-  ChevronLeft,
-  ChevronRight,
   Eye,
   Trash2,
   Heart,
@@ -19,6 +17,7 @@ import { storage } from '../lib/storage';
 import { User, Story, UserStoryGroup } from '../types';
 import { UserAvatar } from '../components/UserAvatar';
 import { soundEngine } from '../lib/audioTone';
+import { downloadMediaFile } from '../lib/mediaUtils';
 
 interface StoryViewerScreenProps {
   currentUser: User;
@@ -82,12 +81,10 @@ export const StoryViewerScreen: React.FC<StoryViewerScreenProps> = ({
     }
 
     if (currentStory.mediaType === 'VIDEO') {
-      // For video: playback is driven by video element's timeupdate (up to 60s)
       if (videoRef.current && videoRef.current.paused) {
         videoRef.current.play().catch(() => {});
       }
     } else {
-      // For images: 10 seconds comfortable timer
       const duration = 10000;
       const interval = 50;
       const step = (interval / duration) * 100;
@@ -111,7 +108,6 @@ export const StoryViewerScreen: React.FC<StoryViewerScreenProps> = ({
   const handleVideoTimeUpdate = () => {
     if (!videoRef.current || isPaused || showViewersSheet) return;
     const video = videoRef.current;
-    // Cap video duration to 60 seconds if it's longer
     const effectiveDuration = Math.min(60, video.duration || 60);
     const current = video.currentTime;
     const calcProgress = (current / effectiveDuration) * 100;
@@ -156,27 +152,17 @@ export const StoryViewerScreen: React.FC<StoryViewerScreenProps> = ({
   const handleDownloadStoryHQ = async () => {
     if (!currentStory || !currentStory.mediaUrl) return;
 
-    setDownloadToast('جاري تنزيل القصة بأعلى جودة...');
-    try {
-      const response = await fetch(currentStory.mediaUrl);
-      const blob = await response.blob();
-      const blobUrl = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = blobUrl;
-      const ext = currentStory.mediaType === 'VIDEO' ? 'mp4' : 'jpg';
-      link.download = `NT_STORY_${currentStory.username}_${Date.now()}.${ext}`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(blobUrl);
+    setDownloadToast('جاري حفظ القصة في الاستوديو...');
+    const ext = currentStory.mediaType === 'VIDEO' ? 'mp4' : 'jpg';
+    const filename = `NT_STORY_${currentStory.username}_${Date.now()}.${ext}`;
 
+    const success = await downloadMediaFile(currentStory.mediaUrl, filename);
+    if (success) {
       setDownloadToast('تم حفظ القصة في الاستوديو بجودة أصلية');
-      setTimeout(() => setDownloadToast(null), 3000);
-    } catch {
-      window.open(currentStory.mediaUrl, '_blank');
-      setDownloadToast('تم فتح القصة للتنزيل المباشر');
-      setTimeout(() => setDownloadToast(null), 3000);
+    } else {
+      setDownloadToast('تم بدء التنزيل المباشر');
     }
+    setTimeout(() => setDownloadToast(null), 3000);
   };
 
   const handleSendStoryReply = (e?: React.FormEvent) => {
@@ -345,7 +331,7 @@ export const StoryViewerScreen: React.FC<StoryViewerScreenProps> = ({
             className="absolute right-0 inset-y-0 w-1/3 z-30 cursor-pointer"
           />
 
-          {/* Media Rendering */}
+          {/* Media Rendering with object-contain to prevent any distortion */}
           {currentStory.mediaUrl ? (
             currentStory.mediaType === 'VIDEO' ? (
               <video
@@ -356,14 +342,14 @@ export const StoryViewerScreen: React.FC<StoryViewerScreenProps> = ({
                 controls={false}
                 onTimeUpdate={handleVideoTimeUpdate}
                 onEnded={handleVideoEnded}
-                className="w-full h-full object-cover"
+                className="w-full h-full object-contain"
               />
             ) : (
               <img
                 src={currentStory.mediaUrl}
                 alt="Story"
                 referrerPolicy="no-referrer"
-                className="w-full h-full object-cover"
+                className="w-full h-full object-contain"
               />
             )
           ) : (

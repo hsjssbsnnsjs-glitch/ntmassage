@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   ArrowRight,
   Shield,
@@ -10,12 +10,10 @@ import {
   Sun,
   Palette,
   Volume2,
-  Lock,
-  Download,
   AlertTriangle,
-  FileText,
   UserX,
-  Share2,
+  CheckCircle,
+  Sparkles,
 } from 'lucide-react';
 import { storage } from '../lib/storage';
 import { notificationManager } from '../lib/notifications';
@@ -39,11 +37,13 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
 
   const [themeMode, setThemeMode] = useState<ThemeMode>(storage.getThemeMode());
   const [soundEnabled, setSoundEnabled] = useState(storage.isSoundEnabled());
-  const [vibrationEnabled, setVibrationEnabled] = useState(storage.isVibrationEnabled());
   const [notificationsEnabled, setNotificationsEnabled] = useState(
     storage.isPushNotificationEnabled()
   );
-  const [privacyLock, setPrivacyLock] = useState(storage.isPrivacyLockEnabled());
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>(
+    notificationManager.getPermissionState()
+  );
+  const [notifTestSuccess, setNotifTestSuccess] = useState<string | null>(null);
 
   // Password Change
   const [showPasswordChange, setShowPasswordChange] = useState(false);
@@ -61,6 +61,10 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
 
   const blockedUsers = storage.getBlockedUsers(currentUser.id);
 
+  useEffect(() => {
+    setNotificationPermission(notificationManager.getPermissionState());
+  }, []);
+
   const handleToggleTheme = (mode: ThemeMode) => {
     setThemeMode(mode);
     storage.applyTheme(mode);
@@ -76,7 +80,30 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
     setNotificationsEnabled(next);
     storage.setPushNotificationEnabled(next);
     if (next) {
-      await notificationManager.requestPermission();
+      const granted = await notificationManager.requestPermission();
+      setNotificationPermission(notificationManager.getPermissionState());
+      if (granted) {
+        setNotifTestSuccess('تم تفعيل الإشعارات بنجاح!');
+        setTimeout(() => setNotifTestSuccess(null), 3000);
+      }
+    }
+  };
+
+  const handleTestNotification = async () => {
+    const granted = await notificationManager.requestPermission();
+    setNotificationPermission(notificationManager.getPermissionState());
+
+    if (granted || notificationManager.getPermissionState() === 'granted') {
+      notificationManager.notify('NT MASSAGE', {
+        body: `مرحباً ${currentUser.displayName}، الإشعارات تعمل بنجاح على جهازك!`,
+        avatarUrl: currentUser.avatarUrl,
+        type: 'SYSTEM',
+      });
+      setNotifTestSuccess('تم إرسال إشعار تجريبي للجهاز بنجاح!');
+      setTimeout(() => setNotifTestSuccess(null), 3500);
+    } else {
+      setNotifTestSuccess('يرجى السماح بالإشعارات من إعدادات المتصفح/الجهاز.');
+      setTimeout(() => setNotifTestSuccess(null), 4000);
     }
   };
 
@@ -84,18 +111,6 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
     const next = !soundEnabled;
     setSoundEnabled(next);
     storage.setSoundEnabled(next);
-  };
-
-  const handleToggleVibration = () => {
-    const next = !vibrationEnabled;
-    setVibrationEnabled(next);
-    storage.setVibrationEnabled(next);
-  };
-
-  const handleTogglePrivacyLock = () => {
-    const next = !privacyLock;
-    setPrivacyLock(next);
-    storage.setPrivacyLockEnabled(next);
   };
 
   const handlePasswordSubmit = (e: React.FormEvent) => {
@@ -122,19 +137,6 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
     } else {
       setPasswordError(res.error || 'فشل تحديث كلمة المرور');
     }
-  };
-
-  const handleExportData = () => {
-    const data = storage.exportAllData();
-    const blob = new Blob([data], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `NT_MASSAGE_BACKUP_${currentUser.username}_${Date.now()}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
   };
 
   const handleClearCache = () => {
@@ -179,7 +181,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
               }`}
             >
               <Moon size={16} />
-              <span>الأسود (Dark / Black)</span>
+              <span>الأسود (Dark)</span>
             </button>
             <button
               id="theme-light-btn"
@@ -191,7 +193,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
               }`}
             >
               <Sun size={16} />
-              <span>الأبيض (Light / White)</span>
+              <span>الأبيض (Light)</span>
             </button>
           </div>
         </div>
@@ -209,7 +211,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                 appLanguage === 'ARABIC' ? 'bg-white text-black shadow-md' : 'text-zinc-400 hover:text-white'
               }`}
             >
-              العربية (Default)
+              العربية (افتراضي)
             </button>
             <button
               onClick={() => handleToggleLanguage('ENGLISH')}
@@ -229,10 +231,25 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
             <span>{t.notifications}</span>
           </label>
           <div className="bg-zinc-950 border border-zinc-800 rounded-2xl divide-y divide-zinc-900 overflow-hidden">
+            {/* Toggle Push Notifications */}
             <div className="p-3.5 flex items-center justify-between">
               <div>
                 <p className="font-bold text-xs text-white">{t.enablePushNotifications}</p>
-                <p className="text-[10px] text-zinc-500">إشعارات الرسائل والمكالمات في الخلفية</p>
+                <p className="text-[10px] text-zinc-500">تلقي تنبيهات الرسائل والمكالمات والتفاعلات</p>
+                <div className="mt-1 flex items-center gap-1.5">
+                  <span
+                    className={`inline-block w-2 h-2 rounded-full ${
+                      notificationPermission === 'granted' ? 'bg-emerald-400' : 'bg-zinc-600'
+                    }`}
+                  />
+                  <span className="text-[10px] font-mono text-zinc-400">
+                    {notificationPermission === 'granted'
+                      ? 'إذن النظام: مفعّل'
+                      : notificationPermission === 'denied'
+                      ? 'إذن النظام: محظور من المتصفح'
+                      : 'إذن النظام: بانتظار الموافقة'}
+                  </span>
+                </div>
               </div>
               <input
                 type="checkbox"
@@ -241,6 +258,28 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                 className="w-4 h-4 accent-white cursor-pointer"
               />
             </div>
+
+            {/* Test Notification Button */}
+            <div className="p-3 bg-zinc-900/40 flex items-center justify-between">
+              <span className="text-xs text-zinc-300">اختبار الإشعارات الآن</span>
+              <button
+                type="button"
+                onClick={handleTestNotification}
+                className="px-3 py-1.5 bg-white text-black hover:bg-zinc-200 text-xs font-bold rounded-xl flex items-center gap-1 cursor-pointer transition-all active:scale-95 shadow-sm"
+              >
+                <Sparkles size={13} />
+                <span>إرسال إشعار تجريبي</span>
+              </button>
+            </div>
+
+            {notifTestSuccess && (
+              <div className="p-2.5 bg-emerald-500/10 border border-emerald-500/30 text-xs text-emerald-400 font-semibold flex items-center gap-1.5">
+                <CheckCircle size={14} />
+                <span>{notifTestSuccess}</span>
+              </div>
+            )}
+
+            {/* Sound Effects */}
             <div className="p-3.5 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Volume2 size={16} className="text-zinc-400" />
@@ -256,18 +295,6 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                 className="w-4 h-4 accent-white cursor-pointer"
               />
             </div>
-            <div className="p-3.5 flex items-center justify-between">
-              <div>
-                <p className="font-bold text-xs text-white">{t.vibration}</p>
-                <p className="text-[10px] text-zinc-500">الاهتزاز عند ورود اتصال أو تنبيه</p>
-              </div>
-              <input
-                type="checkbox"
-                checked={vibrationEnabled}
-                onChange={handleToggleVibration}
-                className="w-4 h-4 accent-white cursor-pointer"
-              />
-            </div>
           </div>
         </div>
 
@@ -278,22 +305,6 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
             <span>{t.privacy}</span>
           </label>
           <div className="bg-zinc-950 border border-zinc-800 rounded-2xl divide-y divide-zinc-900 overflow-hidden">
-            <div className="p-3.5 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Lock size={16} className="text-zinc-400" />
-                <div>
-                  <p className="font-bold text-xs text-white">قفل الخصوصية الحساس</p>
-                  <p className="text-[10px] text-zinc-500">إخفاء المعاينة عند مغادرة التطبيق</p>
-                </div>
-              </div>
-              <input
-                type="checkbox"
-                checked={privacyLock}
-                onChange={handleTogglePrivacyLock}
-                className="w-4 h-4 accent-white cursor-pointer"
-              />
-            </div>
-
             <button
               onClick={() => setShowBlockedUsersModal(true)}
               className="w-full text-right p-3.5 hover:bg-zinc-900 flex items-center justify-between text-xs font-bold text-zinc-200 cursor-pointer"
@@ -380,20 +391,13 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
           </form>
         )}
 
-        {/* Section: Data & Backup */}
+        {/* Section: Storage & Clear Cache */}
         <div className="space-y-2">
           <label className="text-xs font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5 px-1">
-            <Download size={14} />
-            <span>{t.backupAndData}</span>
+            <Trash2 size={14} />
+            <span>الذاكرة المؤقتة والبيانات</span>
           </label>
-          <div className="bg-zinc-950 border border-zinc-800 rounded-2xl divide-y divide-zinc-900 overflow-hidden">
-            <button
-              onClick={handleExportData}
-              className="w-full text-right p-3.5 hover:bg-zinc-900 flex items-center justify-between text-xs font-bold text-zinc-200 cursor-pointer"
-            >
-              <span>{t.exportChatHistory}</span>
-              <Download size={15} className="text-zinc-400" />
-            </button>
+          <div className="bg-zinc-950 border border-zinc-800 rounded-2xl overflow-hidden">
             <button
               onClick={() => setShowClearDataConfirm(true)}
               className="w-full text-right p-3.5 hover:bg-red-500/10 text-red-400 flex items-center justify-between text-xs font-bold cursor-pointer"
@@ -425,7 +429,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
         </div>
 
         <div className="text-center pt-4 text-zinc-600 text-[10px] font-mono">
-          NT MASSAGE • Version 2.5 Monochrome Release
+          NT MASSAGE • Version 3.0 Real-time Online Release
         </div>
       </main>
 

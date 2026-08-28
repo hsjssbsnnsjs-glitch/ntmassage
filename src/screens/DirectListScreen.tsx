@@ -170,7 +170,18 @@ export const DirectListScreen: React.FC<DirectListScreenProps> = ({
 
   useEffect(() => {
     if (searchQuery.trim()) {
+      // Immediate local results
       setSearchResults(storage.searchUsers(searchQuery));
+      // Async server fetch for new users on other devices
+      let active = true;
+      storage.searchUsersAsync(searchQuery).then((results) => {
+        if (active) {
+          setSearchResults(results);
+        }
+      });
+      return () => {
+        active = false;
+      };
     } else {
       setSearchResults([]);
     }

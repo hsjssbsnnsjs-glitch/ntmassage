@@ -40,31 +40,78 @@ export const CallScreen: React.FC<CallScreenProps> = ({
   const [isVideoEnabled, setIsVideoEnabled] = useState(callType === 'VIDEO');
   const [isSpeakerOn, setIsSpeakerOn] = useState(true);
   const [cameraFacingMode, setCameraFacingMode] = useState<'user' | 'environment'>('user');
+  const [mediaPermissionStatus, setMediaPermissionStatus] = useState<'REQUESTING' | 'GRANTED' | 'DENIED' | 'UNAVAILABLE'>('REQUESTING');
+  const [micActivity, setMicActivity] = useState<number>(0);
 
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const animationFrameRef = useRef<number | null>(null);
 
-  // Initialize Media Stream (Camera & Mic)
+  // Initialize Media Stream (Camera & Mic with real hardware permission request)
   useEffect(() => {
     let active = true;
 
     const initMedia = async () => {
       try {
-        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        if (typeof navigator !== 'undefined' && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
           const stream = await navigator.mediaDevices.getUserMedia({
-            video: callType === 'VIDEO' ? { facingMode: cameraFacingMode } : false,
-            audio: true,
+            video: callType === 'VIDEO' ? { facingMode: cameraFacingMode, width: { ideal: 1280 }, height: { ideal: 720 } } : false,
+            audio: {
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: true,
+            },
           });
           if (active) {
             localStreamRef.current = stream;
+            setMediaPermissionStatus('GRANTED');
             if (localVideoRef.current) {
               localVideoRef.current.srcObject = stream;
               localVideoRef.current.play().catch(() => {});
             }
+
+            // Real microphone audio level detection
+            try {
+              const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+              if (AudioCtx) {
+                const audioCtx = new AudioCtx();
+                audioContextRef.current = audioCtx;
+                const source = audioCtx.createMediaStreamSource(stream);
+                const analyser = audioCtx.createAnalyser();
+                analyser.fftSize = 256;
+                source.connect(analyser);
+                const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+                const updateVolume = () => {
+                  if (!active) return;
+                  analyser.getByteFrequencyData(dataArray);
+                  let sum = 0;
+                  for (let i = 0; i < dataArray.length; i++) {
+                    sum += dataArray[i];
+                  }
+                  const avg = sum / dataArray.length;
+                  setMicActivity(Math.min(100, Math.round((avg / 128) * 100)));
+                  animationFrameRef.current = requestAnimationFrame(updateVolume);
+                };
+                updateVolume();
+              }
+            } catch (audioErr) {
+              console.warn('Audio analyser init:', audioErr);
+            }
+          }
+        } else {
+          setMediaPermissionStatus('UNAVAILABLE');
+        }
+      } catch (err: any) {
+        console.warn('Camera/Mic stream access error:', err);
+        if (active) {
+          if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+            setMediaPermissionStatus('DENIED');
+          } else {
+            setMediaPermissionStatus('UNAVAILABLE');
           }
         }
-      } catch (err) {
-        console.warn('Camera/Mic stream access:', err);
       }
     };
 
@@ -72,6 +119,12 @@ export const CallScreen: React.FC<CallScreenProps> = ({
 
     return () => {
       active = false;
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+      if (audioContextRef.current) {
+        audioContextRef.current.close().catch(() => {});
+      }
       if (localStreamRef.current) {
         localStreamRef.current.getTracks().forEach((track) => track.stop());
       }
@@ -304,16 +357,35 @@ export const CallScreen: React.FC<CallScreenProps> = ({
           </div>
         )}
 
-        {/* Call Timer or Ringing indicator */}
-        <div className="text-center">
+        {/* Call Timer, Mic Level or Ringing indicator */}
+        <div className="text-center space-y-2">
+          {mediaPermissionStatus === 'DENIED' && (
+            <div className="bg-red-500/20 border border-red-500/40 text-red-300 text-xs px-3 py-1.5 rounded-xl font-bold max-w-xs mx-auto">
+              يرجى السماح باستخدام الكاميرا والمايكروفون من إعدادات المتصفح لإتمام المكالمة
+            </div>
+          )}
+
           {callStatus === 'RINGING' && (
             <p className="text-xs text-zinc-400 font-bold animate-pulse">جاري الرنين والاتصال...</p>
           )}
 
           {callStatus === 'CONNECTED' && (
-            <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-zinc-900 border border-zinc-800 text-xs font-mono text-emerald-400 font-bold">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              <span>{formatDuration(durationSeconds)}</span>
+            <div className="flex flex-col items-center gap-1.5">
+              <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-zinc-900 border border-zinc-800 text-xs font-mono text-emerald-400 font-bold">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span>{formatDuration(durationSeconds)}</span>
+              </div>
+
+              {/* Live Mic Wave Feedback */}
+              {!isMuted && (
+                <div className="flex items-center gap-1 h-3 px-2 py-0.5 bg-zinc-900/80 rounded-full border border-zinc-800">
+                  <span className="text-[9px] text-zinc-400 font-mono">مايكروفون:</span>
+                  <div
+                    className="h-1.5 bg-emerald-400 rounded-full transition-all duration-75"
+                    style={{ width: `${Math.max(6, (micActivity / 100) * 45)}px` }}
+                  />
+                </div>
+              )}
             </div>
           )}
 

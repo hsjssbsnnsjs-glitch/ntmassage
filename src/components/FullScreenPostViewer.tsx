@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Heart, MessageSquare, Send, Download, MoreVertical, Edit2, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { X, Heart, MessageSquare, Send, Download, MoreVertical, Edit2, Trash2, ChevronLeft, ChevronRight, CheckCircle } from 'lucide-react';
 import { Post, User } from '../types';
 import { UserAvatar } from './UserAvatar';
 import { VideoPostPlayer } from './VideoPostPlayer';
 import { ConfirmModal } from './ConfirmModal';
 import { storage } from '../lib/storage';
+import { downloadMediaFile } from '../lib/mediaUtils';
 import { getT } from '../lib/translations';
 
 interface FullScreenPostViewerProps {
@@ -70,22 +71,13 @@ export const FullScreenPostViewer: React.FC<FullScreenPostViewerProps> = ({
   }, [onNextPost, onPrevPost, hasNextPost, hasPrevPost, onClose]);
 
   const handleDownload = async () => {
-    try {
-      if (!post.mediaUrl) return;
-      const response = await fetch(post.mediaUrl);
-      const blob = await response.blob();
-      const blobUrl = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = blobUrl;
-      link.download = `NT_MEDIA_${Date.now()}.${post.mediaType === 'VIDEO' ? 'mp4' : 'jpg'}`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(blobUrl);
+    if (!post.mediaUrl) return;
+    const ext = post.mediaType === 'VIDEO' ? 'mp4' : 'jpg';
+    const filename = `NT_POST_${post.username}_${Date.now()}.${ext}`;
+    const success = await downloadMediaFile(post.mediaUrl, filename);
+    if (success) {
       setDownloadSuccess(true);
       setTimeout(() => setDownloadSuccess(false), 2500);
-    } catch {
-      window.open(post.mediaUrl, '_blank');
     }
   };
 
@@ -232,7 +224,7 @@ export const FullScreenPostViewer: React.FC<FullScreenPostViewerProps> = ({
             </div>
           </div>
 
-          {/* Media Container */}
+          {/* Media Container - object-contain prevents any stretching or distortion */}
           <div className="flex-1 min-h-[300px] max-h-[500px] bg-black flex items-center justify-center relative overflow-hidden">
             {post.mediaUrl ? (
               post.mediaType === 'VIDEO' ? (
@@ -256,8 +248,9 @@ export const FullScreenPostViewer: React.FC<FullScreenPostViewerProps> = ({
             )}
 
             {downloadSuccess && (
-              <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-white text-black text-xs font-bold px-3 py-1.5 rounded-full shadow-lg z-30 animate-in fade-in slide-in-from-top-2">
-                ✓ {t.downloadSuccess}
+              <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-white text-black text-xs font-bold px-3.5 py-1.5 rounded-full shadow-2xl z-30 flex items-center gap-1.5 animate-in fade-in slide-in-from-top-2">
+                <CheckCircle size={14} className="text-emerald-600" />
+                <span>تم حفظ الملف في الاستوديو بنجاح</span>
               </div>
             )}
           </div>
