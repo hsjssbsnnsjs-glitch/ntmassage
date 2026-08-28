@@ -216,8 +216,8 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
 
         {/* Header Monogram */}
         <div className="flex flex-col items-center text-center">
-          <div className="w-16 h-16 rounded-2xl bg-white text-black flex items-center justify-center shadow-[0_0_30px_rgba(255,255,255,0.25)] border border-zinc-200 mb-3">
-            <Zap size={32} className="fill-black" />
+          <div className="w-16 h-16 rounded-2xl bg-black text-white flex items-center justify-center shadow-[0_0_30px_rgba(255,255,255,0.15)] border border-zinc-800 mb-3">
+            <span className="font-black text-2xl tracking-tighter text-white">NT</span>
           </div>
           <h2 className="font-black text-2xl tracking-wider text-white">NT MASSAGE</h2>
           <p className="text-xs text-zinc-400 mt-1">

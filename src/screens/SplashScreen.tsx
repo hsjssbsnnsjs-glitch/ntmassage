@@ -28,9 +28,9 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onFinish }) => {
         transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
         className="flex flex-col items-center z-10"
       >
-        {/* Glowing NT Monogram */}
-        <div className="w-24 h-24 rounded-3xl bg-white text-black flex items-center justify-center shadow-[0_0_50px_rgba(255,255,255,0.4)] border border-zinc-200">
-          <span className="font-black text-4xl tracking-tighter">NT</span>
+        {/* Glowing NT Monogram on Black */}
+        <div className="w-24 h-24 rounded-3xl bg-black text-white flex items-center justify-center shadow-[0_0_50px_rgba(255,255,255,0.2)] border border-zinc-800">
+          <span className="font-black text-4xl tracking-tighter text-white">NT</span>
         </div>
 
         <motion.h1
