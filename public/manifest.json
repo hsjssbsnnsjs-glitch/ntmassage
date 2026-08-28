@@ -1,0 +1,27 @@
+{
+  "id": "com.ntmassage.app",
+  "name": "NT MASSAGE",
+  "short_name": "NT MASSAGE",
+  "description": "Real-time direct messaging, 24h stories, 4K media sharing, and video calling app in sleek monochrome aesthetics.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#000000",
+  "theme_color": "#000000",
+  "categories": ["social", "communication", "lifestyle"],
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

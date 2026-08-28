@@ -1,0 +1,6 @@
+{
+  "name": "NT MASSAGE",
+  "description": "Real-time messaging, profiles, posts, stories, 4K media sharing, and video calling app in sleek monochrome aesthetics.",
+  "requestFramePermissions": ["camera", "microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
